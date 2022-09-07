@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""
+Fix moved/renamed files before running rsync to avoid useless retransmissions.
+
+Copyright (C) 2022 Anton Pirogov, licensed under the MIT License
+"""
+from itertools import chain
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+from pathlib import Path
+from datetime import datetime
+from shlex import quote
+import argparse
+import subprocess
+
+HASHSUM_TOOL = "sha256sum"  # NOTE: must be available on both SRC and DEST host
+
+verbose: bool = False
+
+def arg_parser():
+    parser = argparse.ArgumentParser(prog=Path(__file__).name, description=__doc__)
+    parser.add_argument("-v", "--verbose", action="store_true", default=False)
+    parser.add_argument("-s", "--script", action="store_true", default=False,
+                        help="Just output script executing detected moves ('dry run')")
+    parser.add_argument("-e", "--rsh", default="ssh",
+                        help="rsync remote shell command to use")
+    parser.add_argument("-f", "--filter-args", default="",
+                        help="rsync args affecting file list")
+    parser.add_argument("SRC")
+    parser.add_argument("DEST")
+    return parser
+
+def main():
+    global verbose
+
+    args = arg_parser().parse_args()
+    verbose = args.verbose
+    assert not args.SRC.endswith("/"), "SRC must not have trailing slash!"
+    assert not args.DEST.endswith("/"), "DEST must not have trailing slash!"
+
+    if verbose:
+        print("---- find moved/renamed files: ----")
+
+    moves = compute_moves(args)
+
+    if verbose:
+        print("-------- required actions: --------")
+
+        for cmd, src, trg in moves:
+            print(cmd, quote(src), quote(trg))
+
+        print("-------- perform  actions: --------")
+
+    for move in moves:
+        cmd = dst_cmd(args, *move)
+        print(cmd)  # always show cmd! if something goes wrong, it helps debugging
+        if not args.script:
+            run(cmd)
+
+    if verbose:
+        print("-----------------------------------")
+
+# ----
+
+@dataclass
+class FileInfo:
+    # parsed from output
+    filename: str
+    permissions: str
+    size: int
+    timestamp: datetime
+
+    # for candidates:
+    # additionally computed hashsum, or the size if it is unique in file set
+    hashsum: Optional[str]
+
+    @property
+    def is_dir(self):
+        return self.permissions[0] == "d"
+
+def run(cmd, check=True) -> bytes:
+    """Run command and return standard output."""
+    if verbose:
+        print(f"run: {cmd}")
+    return subprocess.run(cmd, shell=True, check=check, capture_output=True).stdout
+
+def rsync_list_cmd(args, dir: str) -> str:
+    """Command to list rsync candidate files."""
+    return f"rsync {args.filter_args} -e '{args.rsh}' --list-only {dir}"
+
+def rsync_list(args, dir) -> Dict[str, FileInfo]:
+    """Return FileInfo objects for each rsync candidate."""
+    output = run(rsync_list_cmd(args, dir))
+    lines = output.decode("utf-8").splitlines()
+    parsed = [l.split(maxsplit=4) for l in lines]
+    ret = {}
+    for permissions, size, date, time, path in parsed:
+        sz = int(size.replace(".", ""))
+        timestamp = datetime.strptime(f"{date} {time}", '%Y/%m/%d %H:%M:%S')
+        ret[path] = FileInfo(Path(path).name, permissions, sz, timestamp, hashsum=None)
+    return ret
+
+def hashsum(args, path, is_src: bool=True) -> Optional[str]:
+    """Compute hashsum of a file (at source or target)."""
+    root = args.SRC if is_src else args.DEST
+    is_local = root.split("/")[0].find(":") < 0
+
+    if is_local:
+        cmd_pref = ""
+        filepath = str(Path(root).parent / path)
+    else:
+        remote_host, remote_dir = root.split(":")
+        cmd_pref = f"{args.rsh} {remote_host} "
+        filepath = f"{remote_dir}/{path}"
+    cmd = f"{HASHSUM_TOOL} {quote(filepath)}"
+    if not is_local:
+        cmd = f"{cmd_pref} {quote(cmd)}"
+
+    ret = run(cmd, check=False)
+    if not ret:
+        return None
+    else:
+        return ret.decode("utf-8").split()[0]
+
+def dst_cmd(args, cmd, src_path, trg_path) -> str:
+    root = args.DEST
+    is_local = root.split("/")[0].find(":") < 0
+
+    remote_host, remote_dir = (None, None)
+    if not is_local:
+            remote_host, remote_dir = root.split(":")
+
+    def wrap_cmd(cmd):
+        if is_local:
+            return cmd
+        else:
+            cmd_pref = f"{args.rsh} {remote_host} "
+            return f"{cmd_pref} {quote(cmd)}"
+
+    def fullpath(path):
+        if is_local:
+            return str(Path(root).parent / path)
+        else:
+            return f"{remote_dir}/{path}"
+
+    src, trg = fullpath(src_path), fullpath(trg_path)
+    trgdir = "/".join(trg.split("/")[:-1]) or "."
+    return wrap_cmd(f"mkdir -p {quote(trgdir)} && {cmd} -n {quote(src)} {quote(trg)}")
+
+# ----
+
+def keep_with_hashsum(info_dict):
+    return { k: v for k, v in info_dict.items() if v.hashsum }
+
+def classify_paths(src_files, dst_files):
+    added, removed, modified = set(), set(), set()
+    for path in set.union(set(src_files.keys()), set(dst_files.keys())):
+        in_src, in_trg = path in src_files, path in dst_files
+        if in_src and not in_trg:
+            added.add(path)
+        elif in_trg and not in_src:
+            removed.add(path)
+        elif in_src and in_trg:
+            src_file, dst_file = src_files[path], dst_files[path]
+
+            # if file -> dir / dir -> file, this entity was modified
+            diff_dirfile = src_file.is_dir != dst_file.is_dir
+            # if size is different, it could still be e.g. part of linear/circular move
+            # for bigger files, probability of different "real" files to be same size
+            # is very small -> almost as good as hashsum to detect difference
+            # for small files does not matter, they can be trasferred fast anyway
+            diff_size = src_file.size != dst_file.size
+            # different hashsum -> different file with very high likelihood
+            both_hsum = src_file.hashsum and dst_file.hashsum
+            diff_hsum = both_hsum and src_file.hashsum != dst_file.hashsum
+
+            if diff_size or diff_dirfile or diff_hsum:
+                modified.add(path)
+
+    return (added, modified, removed)
+
+
+def hash_to_path_dict(fileinfos: Dict[str, FileInfo]) -> Dict[str, List[str]]:
+    ret = {}
+    for p, i in fileinfos.items():
+        if i.hashsum is None:
+            continue
+        if i.hashsum not in ret:
+            ret[i.hashsum] = []
+        ret[i.hashsum].append(p)
+    return ret
+
+
+def resolve_moves(src_files, dst_files, added, modified, removed):
+    MV_CMD, CP_CMD = "mv", "cp"
+    # reverse lookup of paths by hashsum
+    h_to_src_file = hash_to_path_dict(src_files)
+    h_to_trg_file = hash_to_path_dict(dst_files)
+    # get hashsums of files that were possibly moved:
+    # hashsums of new or mod paths in source
+    src_hsums = {src_files[p].hashsum for p in set.union(added, modified)}
+    # hashsums of removed or mod paths in target
+    trg_hsums = {dst_files[p].hashsum for p in set.union(removed, modified)}
+    # these were moved (hashsum with different paths, exist in target):
+    moved_hsums = set.intersection(src_hsums, trg_hsums)
+    # compute moves to perform in target
+    ret_direct, ret_pre, ret_post = [], [], []
+    for h in moved_hsums:
+        src_path = h_to_trg_file[h][0]  # any file with that hashsum is ok
+        trg_path, copies = h_to_src_file[h][0], h_to_src_file[h][1:]
+
+        if trg_path not in dst_files:
+            ret_direct.append([MV_CMD, src_path, trg_path])
+
+        elif trg_path in src_files:
+            ret_pre.append([MV_CMD, src_path, trg_path + "_tmp"])
+            ret_post.append([MV_CMD, trg_path + "_tmp", trg_path])
+
+        for trg_copy in copies:
+            if trg_copy in dst_files:
+                ret_pre.append([MV_CMD, trg_copy, trg_copy + "_old"])
+            ret_post.append([CP_CMD, trg_path, trg_copy])
+    # return sequence of shell commands in correct order
+    return ret_direct + ret_pre + ret_post
+
+def compute_moves(args):
+    # get list of candidates both locally and on remote
+    DST = f"{args.DEST}/{args.SRC.split('/')[-1]}"
+    src_files, dst_files = rsync_list(args, args.SRC), rsync_list(args, DST)
+
+    # figure out which file size is unique
+    sizes = {} # size -> filename
+    for path, info in chain(src_files.items(), dst_files.items()):
+        if info.size not in sizes:
+            sizes[info.size] = set()
+        sizes[info.size].add(path)
+
+    # use file size as hashsum replacement if it is unique
+    unique_sizes = { size for size, names in sizes.items() if len(names)<2 }
+    for path, info in chain(src_files.items(), dst_files.items()):
+        if info.size in unique_sizes:
+            info.hashsum = str(info.size)
+
+    # get hashsums for files that might have been moved (will compute hashsum for these)
+    # these are files that exist only in src/dest or that look modified (diff. size)
+    c_add, c_mod, c_rem = classify_paths(src_files, dst_files)
+    for path in set.union(c_add, c_mod):
+        src = src_files[path]
+        if src.is_dir or src.hashsum:
+            print(f"{path}: skip (dir or unique file size)")
+            continue
+        src.hashsum = hashsum(args, path, is_src=True)
+    for path in set.union(c_rem, c_mod):
+        dst = dst_files[path]
+        if dst.is_dir or dst.hashsum:
+            print(f"{path}: skip (dir or unique file size)")
+            continue
+        dst.hashsum = hashsum(args, path, is_src=False)
+
+    # now do re-classification for remaining candidates with hashsum
+    src_files, dst_files = keep_with_hashsum(src_files), keep_with_hashsum(dst_files)
+    add, mod, rem = classify_paths(src_files, dst_files)
+    return resolve_moves(src_files, dst_files, add, mod, rem)
+
+# ----
+
+if __name__ == "__main__":
+    main()
