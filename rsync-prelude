@@ -35,8 +35,6 @@ def main():
 
     args = arg_parser().parse_args()
     verbose = args.verbose
-    assert not args.SRC.endswith("/"), "SRC must not have trailing slash!"
-    assert not args.DEST.endswith("/"), "DEST must not have trailing slash!"
 
     if verbose:
         print("---- find moved/renamed files: ----")
@@ -107,11 +105,23 @@ def hashsum(args, path, is_src: bool=True) -> Optional[str]:
 
     if is_local:
         cmd_pref = ""
-        filepath = str(Path(root).parent / path)
+        if root.endswith("/"):
+            filepath = f"{root}{path}"
+        else:
+            if is_src:
+                filepath = str(Path(root).parent / path)
+            else:
+                filepath = f"{root}/{path}"
     else:
         remote_host, remote_dir = root.split(":")
         cmd_pref = f"{args.rsh} {remote_host} "
-        filepath = f"{remote_dir}/{path}"
+        if root.endswith("/"):
+            filepath = f"{remote_dir}{path}"
+        else:
+            if is_src:
+                filepath = str(Path(remote_dir).parent / path)
+            else:
+                filepath = f"{remote_dir}/{path}"
     cmd = f"{HASHSUM_TOOL} {quote(filepath)}"
     if not is_local:
         cmd = f"{cmd_pref} {quote(cmd)}"
@@ -126,9 +136,8 @@ def dst_cmd(args, cmd, src_path, trg_path) -> str:
     root = args.DEST
     is_local = root.split("/")[0].find(":") < 0
 
-    remote_host, remote_dir = (None, None)
     if not is_local:
-            remote_host, remote_dir = root.split(":")
+        remote_host, root = root.split(":")
 
     def wrap_cmd(cmd):
         if is_local:
@@ -138,10 +147,10 @@ def dst_cmd(args, cmd, src_path, trg_path) -> str:
             return f"{cmd_pref} {quote(cmd)}"
 
     def fullpath(path):
-        if is_local:
-            return str(Path(root).parent / path)
+        if root.endswith("/"):
+            return f"{root}{path}"
         else:
-            return f"{remote_dir}/{path}"
+            return f"{root}/{path}"
 
     src, trg = fullpath(src_path), fullpath(trg_path)
     trgdir = "/".join(trg.split("/")[:-1]) or "."
@@ -168,7 +177,7 @@ def classify_paths(src_files, dst_files):
             # if size is different, it could still be e.g. part of linear/circular move
             # for bigger files, probability of different "real" files to be same size
             # is very small -> almost as good as hashsum to detect difference
-            # for small files does not matter, they can be trasferred fast anyway
+            # for small files does not matter, they can be transferred fast anyway
             diff_size = src_file.size != dst_file.size
             # different hashsum -> different file with very high likelihood
             both_hsum = src_file.hashsum and dst_file.hashsum
@@ -225,7 +234,16 @@ def resolve_moves(src_files, dst_files, added, modified, removed):
 
 def compute_moves(args):
     # get list of candidates both locally and on remote
-    DST = f"{args.DEST}/{args.SRC.split('/')[-1]}"
+    if args.SRC.endswith("/"):
+        if args.DEST.endswith("/"):
+            DST = f"{args.DEST}"
+        else:
+            DST = f"{args.DEST}/"
+    else:
+        if args.DEST.endswith("/"):
+            DST = f"{args.DEST}{args.SRC.split('/')[-1]}"
+        else:
+            DST = f"{args.DEST}/{args.SRC.split('/')[-1]}"        
     src_files, dst_files = rsync_list(args, args.SRC), rsync_list(args, DST)
 
     # figure out which file size is unique
