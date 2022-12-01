@@ -95,7 +95,7 @@ def rsync_list(args, dir) -> Dict[str, FileInfo]:
     parsed = [l.split(maxsplit=4) for l in lines]
     ret = {}
     for permissions, size, date, time, path in parsed:
-        sz = int(size.replace(".", ""))
+        sz = int(size.replace(".", "").replace(",", ""))
         timestamp = datetime.strptime(f"{date} {time}", '%Y/%m/%d %H:%M:%S')
         ret[path] = FileInfo(Path(path).name, permissions, sz, timestamp, hashsum=None)
     return ret
