@@ -1,4 +1,4 @@
-rsync-prepare
+rsync-prelude
 =============
 
 Fix moved/renamed files before running rsync to avoid useless retransmissions.
@@ -21,7 +21,17 @@ function updatebackup() {
   RSH_CMD="ssh -p $BACKUP_HOST"
   RSYNC_FILT_ARGS="-aup -FF"
   RSYNC_ARGS="--info=progress2 --delete"
-  rsync-prepare -v -e "$RSH_CMD" -f "$RSYNC_FILT_ARGS" $LOCAL_DATA_DIR $REMOTE_DATA_DIR
+  rsync-prelude -v -e "$RSH_CMD" -f "$RSYNC_FILT_ARGS" $LOCAL_DATA_DIR $REMOTE_DATA_DIR
   rsync -v -e "$RSH_CMD" $RSYNC_ARGS $RSYNC_FILT_ARGS  $LOCAL_DATA_DIR $REMOTE_DATA_DIR
 }
 ```
+
+License
+-------
+
+Distributed under the MIT License, see [LICENSE.md](LICENSE.md).
+
+Acknowledgments
+---------------
+
+Derived from [rsync-prepare](https://gist.github.com/apirogov/c2253daf105d813349c6ae471e97a2d7).

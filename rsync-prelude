@@ -2,7 +2,7 @@
 """
 Fix moved/renamed files before running rsync to avoid useless retransmissions.
 
-Copyright (C) 2022 Anton Pirogov, licensed under the MIT License
+Copyright (C) 2022 Anton Pirogov and Contributors, licensed under the MIT License
 """
 from itertools import chain
 from typing import List, Dict, Optional
