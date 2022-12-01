@@ -20,6 +20,8 @@ verbose: bool = False
 def arg_parser():
     parser = argparse.ArgumentParser(prog=Path(__file__).name, description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true", default=False)
+    parser.add_argument("-q", "--quiet", action="store_true", default=False,
+                        help="Do not print actions taken")
     parser.add_argument("-s", "--script", action="store_true", default=False,
                         help="Just output script executing detected moves ('dry run')")
     parser.add_argument("-e", "--rsh", default="ssh",
@@ -51,7 +53,8 @@ def main():
 
     for move in moves:
         cmd = dst_cmd(args, *move)
-        print(cmd)  # always show cmd! if something goes wrong, it helps debugging
+        if not args.quiet:
+            print(cmd)  # only omit cmd when asked to; if something goes wrong, it helps debugging
         if not args.script:
             run(cmd)
 
