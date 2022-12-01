@@ -16,7 +16,9 @@ import subprocess
 verbose: bool = False
 
 def arg_parser():
-    parser = argparse.ArgumentParser(prog=Path(__file__).name, description=__doc__)
+    parser = argparse.ArgumentParser(prog=Path(__file__).name,
+                                     description=__doc__,
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-v", "--verbose", action="store_true", default=False)
     parser.add_argument("-q", "--quiet", action="store_true", default=False,
                         help="Do not print actions taken")
@@ -28,6 +30,10 @@ def arg_parser():
                         help="rsync args affecting file list")
     parser.add_argument("--hash-tool", default="sha256sum",
                         help="Command to hash files. First word of the output must be the hash. It must be available on both source and target host(s)")
+    parser.add_argument("--mv-cmd", default="mv -n",
+                        help="Command used to move files")
+    parser.add_argument("--cp-cmd", default="cp -n",
+                        help="Command used to copy files")
     parser.add_argument("SRC")
     parser.add_argument("DEST")
     return parser
@@ -157,7 +163,7 @@ def dst_cmd(args, cmd, src_path, trg_path) -> str:
 
     src, trg = fullpath(src_path), fullpath(trg_path)
     trgdir = "/".join(trg.split("/")[:-1]) or "."
-    return wrap_cmd(f"mkdir -p {quote(trgdir)} && {cmd} -n {quote(src)} {quote(trg)}")
+    return wrap_cmd(f"mkdir -p {quote(trgdir)} && {cmd} {quote(src)} {quote(trg)}")
 
 # ----
 
@@ -203,8 +209,7 @@ def hash_to_path_dict(fileinfos: Dict[str, FileInfo]) -> Dict[str, List[str]]:
     return ret
 
 
-def resolve_moves(src_files, dst_files, added, modified, removed):
-    MV_CMD, CP_CMD = "mv", "cp"
+def resolve_moves(args, src_files, dst_files, added, modified, removed):
     # reverse lookup of paths by hashsum
     h_to_src_file = hash_to_path_dict(src_files)
     h_to_trg_file = hash_to_path_dict(dst_files)
@@ -222,16 +227,16 @@ def resolve_moves(src_files, dst_files, added, modified, removed):
         trg_path, copies = h_to_src_file[h][0], h_to_src_file[h][1:]
 
         if trg_path not in dst_files:
-            ret_direct.append([MV_CMD, src_path, trg_path])
+            ret_direct.append([args.mv_cmd, src_path, trg_path])
 
         elif trg_path in src_files:
-            ret_pre.append([MV_CMD, src_path, trg_path + "_tmp"])
-            ret_post.append([MV_CMD, trg_path + "_tmp", trg_path])
+            ret_pre.append([args.mv_cmd, src_path, trg_path + "_tmp"])
+            ret_post.append([args.mv_cmd, trg_path + "_tmp", trg_path])
 
         for trg_copy in copies:
             if trg_copy in dst_files:
-                ret_pre.append([MV_CMD, trg_copy, trg_copy + "_old"])
-            ret_post.append([CP_CMD, trg_path, trg_copy])
+                ret_pre.append([args.mv_cmd, trg_copy, trg_copy + "_old"])
+            ret_post.append([args.cp_cmd, trg_path, trg_copy])
     # return sequence of shell commands in correct order
     return ret_direct + ret_pre + ret_post
 
@@ -283,7 +288,7 @@ def compute_moves(args):
     # now do re-classification for remaining candidates with hashsum
     src_files, dst_files = keep_with_hashsum(src_files), keep_with_hashsum(dst_files)
     add, mod, rem = classify_paths(src_files, dst_files)
-    return resolve_moves(src_files, dst_files, add, mod, rem)
+    return resolve_moves(args, src_files, dst_files, add, mod, rem)
 
 # ----
 
