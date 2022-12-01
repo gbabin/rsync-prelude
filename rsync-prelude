@@ -265,13 +265,15 @@ def compute_moves(args):
     for path in set.union(c_add, c_mod):
         src = src_files[path]
         if src.is_dir or src.hashsum:
-            print(f"{path}: skip (dir or unique file size)")
+            if args.verbose:
+                print(f"{path}: skip (dir or unique file size)")
             continue
         src.hashsum = hashsum(args, path, is_src=True)
     for path in set.union(c_rem, c_mod):
         dst = dst_files[path]
         if dst.is_dir or dst.hashsum:
-            print(f"{path}: skip (dir or unique file size)")
+            if args.verbose:
+                print(f"{path}: skip (dir or unique file size)")
             continue
         dst.hashsum = hashsum(args, path, is_src=False)
 
