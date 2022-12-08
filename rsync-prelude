@@ -141,7 +141,7 @@ def hashsum(args, path: str, is_src: bool=True) -> Optional[str]:
     else:
         return ret.decode("utf-8").split()[0]
 
-def dst_cmd(args, cmd: str, src_path: str, trg_path: str) -> str:
+def dst_cmd(args, cmd: str, arg1: str, arg2: str) -> str:
     root: str = args.DEST
     is_local: bool = root.split("/")[0].find(":") < 0
 
@@ -162,9 +162,17 @@ def dst_cmd(args, cmd: str, src_path: str, trg_path: str) -> str:
         else:
             return f"{root}/{path}"
 
-    src, trg = fullpath(src_path), fullpath(trg_path)
-    trgdir = "/".join(trg.split("/")[:-1]) or "."
-    return wrap_cmd(f"mkdir -p {quote(trgdir)} && {cmd} {quote(src)} {quote(trg)}")
+    if cmd == "touch":
+        timestamp = arg1
+        trg_path = arg2
+        trg = fullpath(trg_path)
+        return wrap_cmd(f"touch -c -t {timestamp} {quote(trg)}")
+    else:
+        src_path = arg1
+        trg_path = arg2
+        src, trg = fullpath(src_path), fullpath(trg_path)
+        trgdir = "/".join(trg.split("/")[:-1]) or "."
+        return wrap_cmd(f"mkdir -p {quote(trgdir)} && {cmd} {quote(src)} {quote(trg)}")
 
 # ----
 
@@ -240,6 +248,8 @@ def resolve_moves(args, src_files: Dict[str, FileInfo], dst_files: Dict[str, Fil
             if trg_copy in dst_files:
                 ret_pre.append([args.mv_cmd, trg_copy, trg_copy + "_old"])
             ret_post.append([args.cp_cmd, trg_path, trg_copy])
+            timestamp = src_files[trg_copy].timestamp.strftime("%Y%m%d%H%M.%S")
+            ret_post.append(["touch", timestamp, trg_copy])
     # return sequence of shell commands in correct order
     return ret_direct + ret_pre + ret_post
 
