@@ -111,8 +111,8 @@ run 15 n "test-root-tmp/source/folder" "."  "$(pwd)/test-root-tmp/target/folder/
 run 16 n "test-root-tmp/source/folder" "."  "$(pwd)/test-root-tmp/target/folder"  -q
 
 run 17 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool md5sum
-run 18 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool sha1sum
-run 19 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool sha256sum
+run 18 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool 'sha1sum -b'
+run 19 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool 'openssl dgst -r -sha256'
 run 20 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool sha512sum
 run 21 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool b2sum
 run 22 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool 'cksum -a sha224 --untagged'
