@@ -5,7 +5,7 @@ Fix moved/renamed files before running rsync to avoid useless retransmissions.
 Copyright (C) 2022 Anton Pirogov and Contributors, licensed under the MIT License
 """
 from itertools import chain
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set, Tuple, Union
 from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime
@@ -15,7 +15,7 @@ import subprocess
 
 verbose: bool = False
 
-def arg_parser():
+def arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=Path(__file__).name,
                                      description=__doc__,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -38,7 +38,7 @@ def arg_parser():
     parser.add_argument("DEST")
     return parser
 
-def main():
+def main() -> None:
     global verbose
 
     args = arg_parser().parse_args()
@@ -82,10 +82,10 @@ class FileInfo:
     hashsum: Optional[str]
 
     @property
-    def is_dir(self):
+    def is_dir(self) -> bool:
         return self.permissions[0] == "d"
 
-def run(cmd, check=True) -> bytes:
+def run(cmd: str, check: bool=True) -> bytes:
     """Run command and return standard output."""
     if verbose:
         print(f"run: {cmd}")
@@ -95,7 +95,7 @@ def rsync_list_cmd(args, dir: str) -> str:
     """Command to list rsync candidate files."""
     return f"rsync {args.filter_args} -e '{args.rsh}' --list-only {dir}"
 
-def rsync_list(args, dir) -> Dict[str, FileInfo]:
+def rsync_list(args, dir: str) -> Dict[str, FileInfo]:
     """Return FileInfo objects for each rsync candidate."""
     output = run(rsync_list_cmd(args, dir))
     lines = output.decode("utf-8").splitlines()
@@ -107,7 +107,7 @@ def rsync_list(args, dir) -> Dict[str, FileInfo]:
         ret[path] = FileInfo(Path(path).name, permissions, sz, timestamp, hashsum=None)
     return ret
 
-def hashsum(args, path, is_src: bool=True) -> Optional[str]:
+def hashsum(args, path: str, is_src: bool=True) -> Optional[str]:
     """Compute hashsum of a file (at source or target)."""
     root = args.SRC if is_src else args.DEST
     is_local = root.split("/")[0].find(":") < 0
@@ -141,21 +141,22 @@ def hashsum(args, path, is_src: bool=True) -> Optional[str]:
     else:
         return ret.decode("utf-8").split()[0]
 
-def dst_cmd(args, cmd, src_path, trg_path) -> str:
-    root = args.DEST
-    is_local = root.split("/")[0].find(":") < 0
+def dst_cmd(args, cmd: str, src_path: str, trg_path: str) -> str:
+    root: str = args.DEST
+    is_local: bool = root.split("/")[0].find(":") < 0
 
     if not is_local:
+        remote_host: str
         remote_host, root = root.split(":")
 
-    def wrap_cmd(cmd):
+    def wrap_cmd(cmd: str) -> str:
         if is_local:
             return cmd
         else:
             cmd_pref = f"{args.rsh} {remote_host} "
             return f"{cmd_pref} {quote(cmd)}"
 
-    def fullpath(path):
+    def fullpath(path: str) -> str:
         if root.endswith("/"):
             return f"{root}{path}"
         else:
@@ -167,10 +168,10 @@ def dst_cmd(args, cmd, src_path, trg_path) -> str:
 
 # ----
 
-def keep_with_hashsum(info_dict):
+def keep_with_hashsum(info_dict: Dict[str, FileInfo]) -> Dict[str, FileInfo]:
     return { k: v for k, v in info_dict.items() if v.hashsum }
 
-def classify_paths(src_files, dst_files):
+def classify_paths(src_files: Dict[str, FileInfo], dst_files: Dict[str, FileInfo]) -> Tuple[Set[str], Set[str], Set[str]]:
     added, removed, modified = set(), set(), set()
     for path in set.union(set(src_files.keys()), set(dst_files.keys())):
         in_src, in_trg = path in src_files, path in dst_files
@@ -199,7 +200,7 @@ def classify_paths(src_files, dst_files):
 
 
 def hash_to_path_dict(fileinfos: Dict[str, FileInfo]) -> Dict[str, List[str]]:
-    ret = {}
+    ret: Dict[str, List[str]] = {}
     for p, i in fileinfos.items():
         if i.hashsum is None:
             continue
@@ -209,7 +210,7 @@ def hash_to_path_dict(fileinfos: Dict[str, FileInfo]) -> Dict[str, List[str]]:
     return ret
 
 
-def resolve_moves(args, src_files, dst_files, added, modified, removed):
+def resolve_moves(args, src_files: Dict[str, FileInfo], dst_files: Dict[str, FileInfo], added: Set[str], modified: Set[str], removed: Set[str]) -> List[List[str]]:
     # reverse lookup of paths by hashsum
     h_to_src_file = hash_to_path_dict(src_files)
     h_to_trg_file = hash_to_path_dict(dst_files)
@@ -223,6 +224,8 @@ def resolve_moves(args, src_files, dst_files, added, modified, removed):
     # compute moves to perform in target
     ret_direct, ret_pre, ret_post = [], [], []
     for h in moved_hsums:
+        if not h:
+            continue
         src_path = h_to_trg_file[h][0]  # any file with that hashsum is ok
         trg_path, copies = h_to_src_file[h][0], h_to_src_file[h][1:]
 
@@ -240,7 +243,7 @@ def resolve_moves(args, src_files, dst_files, added, modified, removed):
     # return sequence of shell commands in correct order
     return ret_direct + ret_pre + ret_post
 
-def compute_moves(args):
+def compute_moves(args) -> List[List[str]]:
     # get list of candidates both locally and on remote
     if args.SRC.endswith("/"):
         if args.DEST.endswith("/"):
@@ -255,7 +258,7 @@ def compute_moves(args):
     src_files, dst_files = rsync_list(args, args.SRC), rsync_list(args, DST)
 
     # figure out which file size is unique
-    sizes = {} # size -> filename
+    sizes: Dict[int, Set[str]] = {} # size -> filename
     for path, info in chain(src_files.items(), dst_files.items()):
         if info.size not in sizes:
             sizes[info.size] = set()
