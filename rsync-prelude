@@ -2,7 +2,7 @@
 """
 Fix moved/renamed files before running rsync to avoid useless retransmissions.
 
-Copyright (C) 2022 Anton Pirogov and Contributors, licensed under the MIT License
+Copyright (C) 2022-2023 Anton Pirogov and Contributors, licensed under the MIT License
 """
 from itertools import chain
 from typing import List, Dict, Optional, Set, Tuple, Union
@@ -283,19 +283,35 @@ def compute_moves(args) -> List[List[str]]:
     # get hashsums for files that might have been moved (will compute hashsum for these)
     # these are files that exist only in src/dest or that look modified (diff. size)
     c_add, c_mod, c_rem = classify_paths(src_files, dst_files)
-    for path in set.union(c_add, c_mod):
+    add_mod = sorted(set.union(c_add, c_mod))
+    add_mod_len = len(add_mod)
+    for i, path in enumerate(add_mod):
         src = src_files[path]
-        if src.is_dir or src.hashsum:
+        if src.is_dir:
             if args.verbose:
-                print(f"{path}: skip (dir or unique file size)")
+                print(f"src {i+1}/{add_mod_len} {path}: skip (dir)")
             continue
+        if src.hashsum:
+            if args.verbose:
+                print(f"src {i+1}/{add_mod_len} {path}: skip (unique file size)")
+            continue
+        if args.verbose:
+            print(f"src {i+1}/{add_mod_len} {path}: compute hash")
         src.hashsum = hashsum(args, path, is_src=True)
-    for path in set.union(c_rem, c_mod):
+    rem_mod = sorted(set.union(c_rem, c_mod))
+    rem_mod_len = len(rem_mod)    
+    for i, path in enumerate(rem_mod):
         dst = dst_files[path]
-        if dst.is_dir or dst.hashsum:
+        if dst.is_dir:
             if args.verbose:
-                print(f"{path}: skip (dir or unique file size)")
+                print(f"dst {i+1}/{rem_mod_len} {path}: skip (dir)")
             continue
+        if dst.hashsum:
+            if args.verbose:
+                print(f"dst {i+1}/{rem_mod_len} {path}: skip (unique file size)")
+            continue
+        if args.verbose:
+            print(f"dst {i+1}/{rem_mod_len} {path}: compute hash")
         dst.hashsum = hashsum(args, path, is_src=False)
 
     # now do re-classification for remaining candidates with hashsum
