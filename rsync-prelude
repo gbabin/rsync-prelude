@@ -2,7 +2,7 @@
 """
 Fix moved/renamed files before running rsync to avoid useless retransmissions.
 
-Copyright (C) 2022-2023 Anton Pirogov and Contributors, licensed under the MIT License
+Copyright (C) 2022-2024 Anton Pirogov and Contributors, licensed under the MIT License
 """
 from itertools import chain
 from typing import List, Dict, Optional, Set, Tuple, Union
@@ -14,35 +14,43 @@ import argparse
 import subprocess
 
 verbose: bool = False
+progress: int = 0
 
 def arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=Path(__file__).name,
                                      description=__doc__,
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-v", "--verbose", action="store_true", default=False)
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("-v", "--verbose", action="store_true", default=False,
+                        help="print internal actions and messages")
+    parser.add_argument("-p", "--progress", metavar="WIDTH", type=int, nargs='?', const=80, default=0,
+                        help="show current command (default width: %(const)s)")
     parser.add_argument("-q", "--quiet", action="store_true", default=False,
-                        help="Do not print actions taken")
+                        help="do not print actions taken")
     parser.add_argument("-s", "--script", action="store_true", default=False,
-                        help="Just output script executing detected moves ('dry run')")
+                        help="just output script executing detected moves ('dry run')")
     parser.add_argument("-e", "--rsh", default="ssh",
-                        help="rsync remote shell command to use")
+                        help="rsync remote shell command to use (default: %(default)s)")
     parser.add_argument("-f", "--filter-args", default="",
                         help="rsync args affecting file list")
     parser.add_argument("--hash-tool", default="sha256sum",
-                        help="Command to hash files. First word of the output must be the hash. It must be available on both source and target host(s)")
+                        help="command to hash files. First word of the output must be the hash. It must be available on both source and target host(s) (default: %(default)s)")
     parser.add_argument("--mv-cmd", default="mv -n",
-                        help="Command used to move files")
+                        help="command used to move files (default: %(default)s)")
     parser.add_argument("--cp-cmd", default="cp -n",
-                        help="Command used to copy files")
-    parser.add_argument("SRC")
-    parser.add_argument("DEST")
+                        help="command used to copy files (default: %(default)s)")
+    parser.add_argument("SRC",
+                        help="source directory")
+    parser.add_argument("DEST",
+                        help="destination directory")
     return parser
 
 def main() -> None:
     global verbose
+    global progress
 
     args = arg_parser().parse_args()
     verbose = args.verbose
+    progress = args.progress
 
     if verbose:
         print("---- find moved/renamed files: ----")
@@ -89,7 +97,17 @@ def run(cmd: str, check: bool=True) -> bytes:
     """Run command and return standard output."""
     if verbose:
         print(f"run: {cmd}")
-    return subprocess.run(cmd, shell=True, check=check, capture_output=True).stdout
+    if progress > 0:
+        if len(cmd) + len("running: ") > progress:
+            pw = (progress - len("running: ") - len("..."))//2
+            cmd_p = cmd[:pw] + "..." + cmd[-pw:]
+        else:
+            cmd_p = cmd
+        print(f"running: {cmd_p}", end="", flush=True)
+    output = subprocess.run(cmd, shell=True, check=check, capture_output=True).stdout
+    if progress > 0:
+        print("\r\033[K", end="", flush=True)
+    return output
 
 def rsync_list_cmd(args, dir: str) -> str:
     """Command to list rsync candidate files."""

@@ -21,23 +21,26 @@ Usage
 -----
 
 ```
-rsync-prelude [-h] [-v] [-q] [-s] [-e RSH] [-f FILTER_ARGS] [--hash-tool HASH_TOOL]
-              [--mv-cmd MV_CMD] [--cp-cmd CP_CMD]
-              SRC DEST
+rsync-prelude [-h] [-v] [-p [WIDTH]] [-q] [-s] [-e RSH] [-f FILTER_ARGS] [--hash-tool HASH_TOOL] [--mv-cmd MV_CMD] [--cp-cmd CP_CMD] SRC DEST
+
+positional arguments:
+  SRC                   source directory
+  DEST                  destination directory
 
 options:
   -h, --help            show this help message and exit
-  -v, --verbose
-  -q, --quiet           Do not print actions taken (default: False)
-  -s, --script          Just output script executing detected moves ('dry run') (default: False)
+  -v, --verbose         print internal actions and messages
+  -p [WIDTH], --progress [WIDTH]
+                        show current command (default width: 80)
+  -q, --quiet           do not print actions taken
+  -s, --script          just output script executing detected moves ('dry run')
   -e RSH, --rsh RSH     rsync remote shell command to use (default: ssh)
   -f FILTER_ARGS, --filter-args FILTER_ARGS
                         rsync args affecting file list
   --hash-tool HASH_TOOL
-                        Command to hash files. First word of the output must be the hash. It must
-                        be available on both source and target host(s) (default: sha256sum)
-  --mv-cmd MV_CMD       Command used to move files (default: mv -n)
-  --cp-cmd CP_CMD       Command used to copy files (default: cp -n)
+                        command to hash files. First word of the output must be the hash. It must be available on both source and target host(s) (default: sha256sum)
+  --mv-cmd MV_CMD       command used to move files (default: mv -n)
+  --cp-cmd CP_CMD       command used to copy files (default: cp -n)
 ```
 
 Example
