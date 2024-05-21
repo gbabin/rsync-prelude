@@ -12,6 +12,12 @@ Features
 - it can detect circular moves/renames (a -> b, b -> c, c -> a)
 - it avoids computing hashsums if the filesize is unique in the set of files (then it cannot be a moved file)
 
+Install
+-------
+
+- manually: download and run `rsync-prelude`
+- using pip: `python -m pip install git+https://github.com/gbabin/rsync-prelude.git`
+
 Prerequisites
 -------------
 

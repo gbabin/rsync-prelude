@@ -1,0 +1,15 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools >= 61.0"]
+
+[project]
+classifiers = ["License :: OSI Approved :: MIT License"]
+name = "rsync-prelude"
+requires-python = ">= 3.7"
+version = "1.0.0"
+
+[project.urls]
+homepage = "https://github.com/gbabin/rsync-prelude"
+
+[tool.setuptools]
+script-files = ["rsync-prelude"]
