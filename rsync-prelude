@@ -12,6 +12,7 @@ from datetime import datetime
 from shlex import quote
 import argparse
 import subprocess
+import sys
 
 verbose: bool = False
 progress: int = 0
@@ -118,6 +119,10 @@ def rsync_list(args, dir: str) -> Dict[str, FileInfo]:
     output = run(rsync_list_cmd(args, dir))
     lines = output.decode("utf-8").splitlines()
     parsed = [l.split(maxsplit=4) for l in lines]
+    for line, chunks in zip(lines, parsed):
+        if len(chunks) != 5:
+            print(f"error: unexpected 'rsync --list-only' output line: {line}")
+            sys.exit(1)
     ret = {}
     for permissions, size, date, time, path in parsed:
         sz = int(size.replace(".", "").replace(",", ""))
