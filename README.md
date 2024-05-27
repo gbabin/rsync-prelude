@@ -27,7 +27,9 @@ Usage
 -----
 
 ```
-rsync-prelude [-h] [-v] [-p [WIDTH]] [-q] [-s] [-e RSH] [-f FILTER_ARGS] [--hash-tool HASH_TOOL] [--mv-cmd MV_CMD] [--cp-cmd CP_CMD] SRC DEST
+rsync-prelude [-h] [-v] [-p [WIDTH]] [-q] [-s] [-e RSH] [-f FILTER_ARGS] [--hash-tool HASH_TOOL]
+              [--mv-cmd MV_CMD] [--cp-cmd CP_CMD]
+              SRC DEST
 
 positional arguments:
   SRC                   source directory
@@ -44,7 +46,8 @@ options:
   -f FILTER_ARGS, --filter-args FILTER_ARGS
                         rsync args affecting file list
   --hash-tool HASH_TOOL
-                        command to hash files. First word of the output must be the hash. It must be available on both source and target host(s) (default: sha256sum)
+                        command to hash files. First word of the output must be the hash. It must
+                        be available on both source and target host(s) (default: sha256sum)
   --mv-cmd MV_CMD       command used to move files (default: mv -n)
   --cp-cmd CP_CMD       command used to copy files (default: cp -n)
 ```
