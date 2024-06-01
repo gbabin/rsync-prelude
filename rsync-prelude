@@ -5,7 +5,7 @@ Fix moved/renamed files before running rsync to avoid useless retransmissions.
 Copyright (C) 2022-2024 Anton Pirogov and Contributors, licensed under the MIT License
 """
 from itertools import chain
-from typing import List, Dict, Optional, Set, Tuple, Union
+from typing import List, Dict, Iterator, Optional, Set, Tuple, Union
 from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime
@@ -72,7 +72,7 @@ def main() -> None:
         if not args.quiet:
             print(cmd)  # only omit cmd when asked to; if something goes wrong, it helps debugging
         if not args.script:
-            run(cmd)
+            run0(cmd)
 
     if verbose:
         print("-----------------------------------")
@@ -95,8 +95,39 @@ class FileInfo:
     def is_dir(self) -> bool:
         return self.permissions[0] == "d"
 
-def run(cmd: str, check: bool=True) -> bytes:
-    """Run command and return standard output."""
+class StdoutIterator:
+    def __init__(self, process: subprocess.Popen[str]):
+        self.process = process
+
+    def __iter__(self) -> Iterator[str]:
+        return self
+
+    def __next__(self) -> str:
+        if self.process.stdout is None:
+            cmd = self.process.args
+            print(f"error: command has no output: {cmd}")
+            sys.exit(5)
+        try:
+            line = next(self.process.stdout)
+        except StopIteration:
+            returncode = self.process.wait()
+            if returncode != 0:
+                cmd = self.process.args
+                print(f"error: command failed with code {returncode}: {cmd}")
+                sys.exit(2)
+            else:
+                raise
+        else:
+            return line[:-1] # omit newline character
+
+def progress_reset() -> None:
+    """Reset progress display."""
+    if progress > 0:
+        # go to beginning of previous line and erase line
+        print("\033[A\r\033[K", end="", flush=True)
+
+def run(cmd: str) -> Iterator[str]:
+    """Run command and return iterator on standard output lines."""
     if verbose:
         print(f"run: {cmd}")
     if progress > 0:
@@ -105,11 +136,35 @@ def run(cmd: str, check: bool=True) -> bytes:
             cmd_p = cmd[:pw] + "..." + cmd[-pw:]
         else:
             cmd_p = cmd
-        print(f"running: {cmd_p}", end="", flush=True)
-    output = subprocess.run(cmd, shell=True, check=check, capture_output=True).stdout
-    if progress > 0:
-        print("\r\033[K", end="", flush=True)
-    return output
+        print(f"running: {cmd_p}", flush=True)
+    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, text=True, bufsize=1, encoding="utf-8")
+    return StdoutIterator(process)
+
+def run0(cmd: str) -> None:
+    """Run command while ensuring no standard output."""
+    it = run(cmd)
+    try:
+        line = next(it)
+    except StopIteration:
+        pass
+    else:
+        print(f"error: command produced unexpected output: {cmd}: {line}")
+        sys.exit(3)
+    progress_reset()
+
+def run1(cmd: str) -> str:
+    """Run command and return the only line of its standard output."""
+    it = run(cmd)
+    line = next(it)
+    try:
+        line2 = next(it)
+    except StopIteration:
+        pass
+    else:
+        print(f"error: command produced more than one line: {cmd}: {line2}")
+        sys.exit(4)
+    progress_reset()
+    return line
 
 def rsync_list_cmd(args, dir: str) -> str:
     """Command to list rsync candidate files."""
@@ -117,21 +172,21 @@ def rsync_list_cmd(args, dir: str) -> str:
 
 def rsync_list(args, dir: str) -> Dict[str, FileInfo]:
     """Return FileInfo objects for each rsync candidate."""
-    output = run(rsync_list_cmd(args, dir))
-    lines = output.decode("utf-8").splitlines()
-    parsed = [l.split(maxsplit=4) for l in lines]
-    for line, chunks in zip(lines, parsed):
-        if len(chunks) != 5:
+    ret = {}
+    for line in run(rsync_list_cmd(args, dir)):
+        try:
+            [permissions, size, date, time, path] = line.split(maxsplit=4)
+            sz = int(size.replace(".", "").replace(",", ""))
+            timestamp = datetime.strptime(f"{date} {time}", '%Y/%m/%d %H:%M:%S')
+        except ValueError:
             print(f"error: unexpected 'rsync --list-only' output line: {line}")
             sys.exit(1)
-    ret = {}
-    for permissions, size, date, time, path in parsed:
-        sz = int(size.replace(".", "").replace(",", ""))
-        timestamp = datetime.strptime(f"{date} {time}", '%Y/%m/%d %H:%M:%S')
-        ret[path] = FileInfo(Path(path).name, permissions, sz, timestamp, hashsum=None)
+        else:
+            ret[path] = FileInfo(Path(path).name, permissions, sz, timestamp, hashsum=None)
+    progress_reset()
     return ret
 
-def hashsum(args, path: str, is_src: bool=True) -> Optional[str]:
+def hashsum(args, path: str, is_src: bool=True) -> str:
     """Compute hashsum of a file (at source or target)."""
     root = args.SRC if is_src else args.DEST
     is_local = root.split("/")[0].find(":") < 0
@@ -159,11 +214,8 @@ def hashsum(args, path: str, is_src: bool=True) -> Optional[str]:
     if not is_local:
         cmd = f"{cmd_pref} {quote(cmd)}"
 
-    ret = run(cmd, check=False)
-    if not ret:
-        return None
-    else:
-        return ret.decode("utf-8").split()[0]
+    ret = run1(cmd)
+    return ret.split()[0]
 
 def dst_cmd(args, cmd: str, arg1: str, arg2: str) -> str:
     root: str = args.DEST
@@ -288,7 +340,7 @@ def compute_moves(args) -> List[List[str]]:
         if args.DEST.endswith("/"):
             DST = f"{args.DEST}{args.SRC.split('/')[-1]}"
         else:
-            DST = f"{args.DEST}/{args.SRC.split('/')[-1]}"        
+            DST = f"{args.DEST}/{args.SRC.split('/')[-1]}"
     src_files, dst_files = rsync_list(args, args.SRC), rsync_list(args, DST)
 
     # figure out which file size is unique
@@ -323,7 +375,7 @@ def compute_moves(args) -> List[List[str]]:
             print(f"src {i+1}/{add_mod_len} {path}: compute hash")
         src.hashsum = hashsum(args, path, is_src=True)
     rem_mod = sorted(set.union(c_rem, c_mod))
-    rem_mod_len = len(rem_mod)    
+    rem_mod_len = len(rem_mod)
     for i, path in enumerate(rem_mod):
         dst = dst_files[path]
         if dst.is_dir:
