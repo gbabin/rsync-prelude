@@ -21,7 +21,7 @@ def arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=Path(__file__).name,
                                      description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--version", action="version", version="%(prog)s 1.0.1")
+    parser.add_argument("--version", action="version", version="%(prog)s 1.1.0")
     parser.add_argument("-v", "--verbose", action="store_true", default=False,
                         help="print internal actions and messages")
     parser.add_argument("-p", "--progress", metavar="WIDTH", type=int, nargs='?', const=80, default=0,
