@@ -83,17 +83,13 @@ def main() -> None:
 class FileInfo:
     # parsed from output
     filename: str
-    permissions: str
+    is_dir: bool
     size: int
     timestamp: datetime
 
     # for candidates:
     # additionally computed hashsum, or the size if it is unique in file set
     hashsum: Optional[str]
-
-    @property
-    def is_dir(self) -> bool:
-        return self.permissions[0] == "d"
 
 class StdoutIterator:
     def __init__(self, process: subprocess.Popen[str]):
@@ -176,13 +172,14 @@ def rsync_list(args, dir: str) -> Dict[str, FileInfo]:
     for line in run(rsync_list_cmd(args, dir)):
         try:
             [permissions, size, date, time, path] = line.split(maxsplit=4)
+            is_dir = (permissions[0] == "d")
             sz = int(size.replace(".", "").replace(",", ""))
             timestamp = datetime.strptime(f"{date} {time}", '%Y/%m/%d %H:%M:%S')
         except ValueError:
             print(f"error: unexpected 'rsync --list-only' output line: {line}")
             sys.exit(1)
         else:
-            ret[path] = FileInfo(Path(path).name, permissions, sz, timestamp, hashsum=None)
+            ret[path] = FileInfo(Path(path).name, is_dir, sz, timestamp, hashsum=None)
     progress_reset()
     return ret
 
