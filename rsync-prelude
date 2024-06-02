@@ -92,7 +92,7 @@ class FileInfo:
     hashsum: Optional[str]
 
 class StdoutIterator:
-    def __init__(self, process: subprocess.Popen[str]):
+    def __init__(self, process: subprocess.Popen): # subprocess.Popen[str])
         self.process = process
 
     def __iter__(self) -> Iterator[str]:
