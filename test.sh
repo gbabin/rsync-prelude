@@ -2,19 +2,26 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+if [ $# -eq 1 ] && [ "$1" = "--minimal" ]; then
+    scope=minimal
+else
+    scope=all
+fi
+
 run() {
-    test_id="$1"
-    test_script="$2"
-    test_dir="$3"
-    test_src="$4"
-    test_dst="$5"
-    shift
-    shift
-    shift
-    shift
-    shift
+    test_id="$1"; shift
+    test_script="$1"; shift
+    test_all="$1"; shift
+    test_dir="$1"; shift
+    test_src="$1"; shift
+    test_dst="$1"; shift
 
     echo ":: [${test_id}] ${test_src} -> ${test_dst}"
+
+    if [ "${scope}" = "minimal" ] && [ "${test_all}" = "all" ]; then
+        echo "Test ${test_id} SKIPPED"
+        return
+    fi
 
     if [ -e test-root-tmp/source ]; then
         chmod -R +w test-root-tmp/source
@@ -56,7 +63,7 @@ run() {
     chmod -R -w test-root-tmp/source
 
     pushd "${test_dir}" > /dev/null
-    if [ "${test_script}" = "y" ]; then
+    if [ "${test_script}" = "script" ]; then
         "${RSYNC_PRELUDE}" -f ' --recursive' "$@" "${test_src}" "${test_dst}" | bash
     else
         "${RSYNC_PRELUDE}" -f ' --recursive' "$@" "${test_src}" "${test_dst}"
@@ -87,36 +94,36 @@ run() {
 
 RSYNC_PRELUDE="$(pwd)/rsync-prelude"
 
-run  1 n "."                  "test-root-tmp/source/folder"                  "test-root-tmp/target" -q
-run  2 n "."                  "test-root-tmp/source/folder" "localhost:$(pwd)/test-root-tmp/target" -q
-run  3 n "." "localhost:$(pwd)/test-root-tmp/source/folder"                  "test-root-tmp/target" -q
+run  1 direct min "."                  "test-root-tmp/source/folder"                  "test-root-tmp/target" -q
+run  2 direct min "."                  "test-root-tmp/source/folder" "localhost:$(pwd)/test-root-tmp/target" -q
+run  3 direct min "." "localhost:$(pwd)/test-root-tmp/source/folder"                  "test-root-tmp/target" -q
 
-run  4 n "."                  "test-root-tmp/source/"                        "test-root-tmp/target" -q
-run  5 n "."                  "test-root-tmp/source/"       "localhost:$(pwd)/test-root-tmp/target" -q
-run  6 n "." "localhost:$(pwd)/test-root-tmp/source/"                        "test-root-tmp/target" -q
+run  4 direct min "."                  "test-root-tmp/source/"                        "test-root-tmp/target" -q
+run  5 direct min "."                  "test-root-tmp/source/"       "localhost:$(pwd)/test-root-tmp/target" -q
+run  6 direct min "." "localhost:$(pwd)/test-root-tmp/source/"                        "test-root-tmp/target" -q
 
-run  7 n "."                  "test-root-tmp/source/folder"                  "test-root-tmp/target/" -q
-run  8 n "."                  "test-root-tmp/source/folder" "localhost:$(pwd)/test-root-tmp/target/" -q
-run  9 n "." "localhost:$(pwd)/test-root-tmp/source/folder"                  "test-root-tmp/target/" -q
+run  7 direct min "."                  "test-root-tmp/source/folder"                  "test-root-tmp/target/" -q
+run  8 direct min "."                  "test-root-tmp/source/folder" "localhost:$(pwd)/test-root-tmp/target/" -q
+run  9 direct min "." "localhost:$(pwd)/test-root-tmp/source/folder"                  "test-root-tmp/target/" -q
 
-run 10 n "."                  "test-root-tmp/source/"                        "test-root-tmp/target/" -q
-run 11 n "."                  "test-root-tmp/source/"       "localhost:$(pwd)/test-root-tmp/target/" -q
-run 12 n "." "localhost:$(pwd)/test-root-tmp/source/"                        "test-root-tmp/target/" -q
+run 10 direct min "."                  "test-root-tmp/source/"                        "test-root-tmp/target/" -q
+run 11 direct min "."                  "test-root-tmp/source/"       "localhost:$(pwd)/test-root-tmp/target/" -q
+run 12 direct min "." "localhost:$(pwd)/test-root-tmp/source/"                        "test-root-tmp/target/" -q
 
-run 13 n "test-root-tmp/source/folder" "./" "$(pwd)/test-root-tmp/target/folder/" -q
-run 14 n "test-root-tmp/source/folder" "./" "$(pwd)/test-root-tmp/target/folder"  -q
-run 15 n "test-root-tmp/source/folder" "."  "$(pwd)/test-root-tmp/target/folder/" -q
-run 16 n "test-root-tmp/source/folder" "."  "$(pwd)/test-root-tmp/target/folder"  -q
+run 13 direct min "test-root-tmp/source/folder" "./" "$(pwd)/test-root-tmp/target/folder/" -q
+run 14 direct min "test-root-tmp/source/folder" "./" "$(pwd)/test-root-tmp/target/folder"  -q
+run 15 direct min "test-root-tmp/source/folder" "."  "$(pwd)/test-root-tmp/target/folder/" -q
+run 16 direct min "test-root-tmp/source/folder" "."  "$(pwd)/test-root-tmp/target/folder"  -q
 
-run 17 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool md5sum
-run 18 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool 'sha1sum -b'
-run 19 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool 'openssl dgst -r -sha256'
-run 20 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool sha512sum
-run 21 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool b2sum
-run 22 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool 'cksum -a sha224 --untagged'
-run 23 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool xxh128sum
+run 17 direct min "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool md5sum
+run 18 direct min "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool 'sha1sum -b'
+run 19 direct all "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool 'openssl dgst -r -sha256'
+run 20 direct min "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool sha512sum
+run 21 direct min "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool b2sum
+run 22 direct min "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool 'cksum -a sha224 --untagged'
+run 23 direct all "." "test-root-tmp/source/" "test-root-tmp/target/" -q --hash-tool xxh128sum
 
-run 24 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --mv-cmd mv
-run 25 n "." "test-root-tmp/source/" "test-root-tmp/target/" -q --mv-cmd 'mv --no-clobber'
+run 24 direct min "." "test-root-tmp/source/" "test-root-tmp/target/" -q --mv-cmd mv
+run 25 direct min "." "test-root-tmp/source/" "test-root-tmp/target/" -q --mv-cmd 'mv --no-clobber'
 
-run 26 y "." "test-root-tmp/source/" "test-root-tmp/target/" --script
+run 26 script min "." "test-root-tmp/source/" "test-root-tmp/target/" --script

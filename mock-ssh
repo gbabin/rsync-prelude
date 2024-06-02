@@ -1,0 +1,7 @@
+#!/bin/sh
+#
+# mock "ssh localhost ..." for testing
+
+shift
+
+eval "$@"
