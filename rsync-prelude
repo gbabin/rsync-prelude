@@ -209,7 +209,7 @@ def hashsum(args, path: str, is_src: bool=True) -> str:
                 filepath = f"{remote_dir}/{path}"
     cmd = f"{args.hash_tool} {quote(filepath)}"
     if not is_local:
-        cmd = f"{cmd_pref} {quote(cmd)}"
+        cmd = f"{cmd_pref}{quote(cmd)}"
 
     ret = run1(cmd)
     return ret.split()[0]
@@ -227,7 +227,7 @@ def dst_cmd(args, cmd: str, arg1: str, arg2: str) -> str:
             return cmd
         else:
             cmd_pref = f"{args.rsh} {remote_host} "
-            return f"{cmd_pref} {quote(cmd)}"
+            return f"{cmd_pref}{quote(cmd)}"
 
     def fullpath(path: str) -> str:
         if root.endswith("/"):
