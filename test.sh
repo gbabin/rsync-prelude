@@ -23,29 +23,29 @@ run() {
 
     mkdir -p test-root-tmp/source/folder
     pushd test-root-tmp/source/folder > /dev/null
-    echo a > file1     ; touch -t 202211271401 file1
-    echo ab > file2    ; touch -t 202211271401 file2
-    echo abc > file3a  ; touch -t 202211271401 file3a
-    echo 123 > file3b  ; touch -t 202211271401 file3b
-    echo abcd > file4  ; touch -t 202211271401 file4
-    echo abcde > file5 ; touch -t 202211271401 file5
+    echo a > file1     ; touch -ct 202211271401 file1
+    echo ab > file2    ; touch -ct 202211271401 file2
+    echo abc > file3a  ; touch -ct 202211271401 file3a
+    echo 123 > file3b  ; touch -ct 202211271401 file3b
+    echo abcd > file4  ; touch -ct 202211271401 file4
+    echo abcde > file5 ; touch -ct 202211271401 file5
     # cycle with different sizes (but some files with same date)
-    echo cycle1 > c1   ; touch -t 202211271402 c1
-    echo cycle22 > c2  ; touch -t 202211271403 c2
-    echo cycle333 > c3 ; touch -t 202211271403 c3
+    echo cycle1 > c1   ; touch -ct 202211271402 c1
+    echo cycle22 > c2  ; touch -ct 202211271403 c2
+    echo cycle333 > c3 ; touch -ct 202211271403 c3
     popd > /dev/null
 
     cp -r --preserve=timestamps test-root-tmp/source test-root-tmp/target
-
-    sleep 2
 
     pushd test-root-tmp/source/folder > /dev/null
     mv -n file1 file1-renamed
     mv -n file3a file3a-renamed
     mkdir moved
     mv -n file2 moved/file2
+    touch -ct 202301011201 moved
     mkdir copy
-    cp -n file4 copy/file4
+    cp -n file4 copy/file4 ; touch -ct 202301011202 copy/file4
+    touch -ct 202301011203 copy
     mv -n file4 file4-renamed
     mv -n c1 c0
     mv -n c2 c1
@@ -54,8 +54,6 @@ run() {
     popd > /dev/null
 
     chmod -R -w test-root-tmp/source
-
-    sleep 2
 
     pushd "${test_dir}" > /dev/null
     if [ "${test_script}" = "y" ]; then
