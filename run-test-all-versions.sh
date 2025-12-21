@@ -2,7 +2,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-for py_ver_min in {7..13}
+for py_ver_min in {7..14}
 do
     cat <<EOF > Dockerfile
 FROM python:3.${py_ver_min}-alpine
