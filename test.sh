@@ -92,6 +92,8 @@ run() {
     fi
 }
 
+export PYTHONWARNINGS=default
+
 RSYNC_PRELUDE="$(pwd)/rsync-prelude"
 
 run  1 direct min "."                  "test-root-tmp/source/folder"                  "test-root-tmp/target" -q
