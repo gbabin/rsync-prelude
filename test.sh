@@ -76,16 +76,16 @@ run() {
 
     if [ "$rem_count" -eq 0 ]
     then
-        diff <(cd test-root-tmp/source; rhash -r -p '%c %s %{mtime} %p\n' .) \
-             <(cd test-root-tmp/target; rhash -r -p '%c %s %{mtime} %p\n' .)
+        diff <(cd test-root-tmp/source; rhash -r -p '%c %s %{mtime} %p\n' . | sort) \
+             <(cd test-root-tmp/target; rhash -r -p '%c %s %{mtime} %p\n' . | sort)
         echo "Test ${test_id} PASSED"
     else
         echo "== rsync diff =="
         echo "$remaining"
         echo "== rhash diff =="
         set +e
-        diff <(cd test-root-tmp/source; rhash -r -p '%c %s %{mtime} %p\n' .) \
-             <(cd test-root-tmp/target; rhash -r -p '%c %s %{mtime} %p\n' .)
+        diff <(cd test-root-tmp/source; rhash -r -p '%c %s %{mtime} %p\n' . | sort) \
+             <(cd test-root-tmp/target; rhash -r -p '%c %s %{mtime} %p\n' . | sort)
         set -e
         echo "Test ${test_id} FAILED"
         exit 1
