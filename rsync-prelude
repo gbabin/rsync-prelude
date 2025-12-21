@@ -106,6 +106,7 @@ class StdoutIterator:
         try:
             line = next(self.process.stdout)
         except StopIteration:
+            self.process.stdout.close()
             returncode = self.process.wait()
             if returncode != 0:
                 cmd = self.process.args
