@@ -64,9 +64,9 @@ run() {
 
     pushd "${test_dir}" > /dev/null
     if [ "${test_script}" = "script" ]; then
-        "${RSYNC_PRELUDE}" -f ' --recursive' "$@" "${test_src}" "${test_dst}" | bash
+        TZ=Canada/Eastern "${RSYNC_PRELUDE}" -f ' --recursive' "$@" "${test_src}" "${test_dst}" | bash
     else
-        "${RSYNC_PRELUDE}" -f ' --recursive' "$@" "${test_src}" "${test_dst}"
+        TZ=Canada/Eastern "${RSYNC_PRELUDE}" -f ' --recursive' "$@" "${test_src}" "${test_dst}"
     fi
     set +e # because of grep
     remaining=$(rsync --dry-run --itemize-changes --recursive "${test_src}" "${test_dst}" | grep '^.f')

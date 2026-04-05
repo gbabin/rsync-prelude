@@ -4,4 +4,6 @@
 
 shift
 
+export TZ=Asia/Tokyo
+
 eval "$@"

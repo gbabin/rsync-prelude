@@ -2,13 +2,13 @@
 """
 Fix moved/renamed files before running rsync to avoid useless retransmissions.
 
-Copyright (C) 2022-2024 Anton Pirogov and Contributors, licensed under the MIT License
+Copyright (C) 2022-2026 Anton Pirogov and Contributors, licensed under the MIT License
 """
 from itertools import chain
 from typing import List, Dict, Iterator, Optional, Set, Tuple, Union
 from dataclasses import dataclass
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from shlex import quote
 import argparse
 import subprocess
@@ -165,7 +165,7 @@ def run1(cmd: str) -> str:
 
 def rsync_list_cmd(args, dir: str) -> str:
     """Command to list rsync candidate files."""
-    return f"rsync {args.filter_args} -e '{args.rsh}' --list-only {dir}"
+    return f"TZ=UTC0 rsync {args.filter_args} -e '{args.rsh}' --list-only {dir}"
 
 def rsync_list(args, dir: str) -> Dict[str, FileInfo]:
     """Return FileInfo objects for each rsync candidate."""
@@ -176,6 +176,7 @@ def rsync_list(args, dir: str) -> Dict[str, FileInfo]:
             is_dir = (permissions[0] == "d")
             sz = int(size.replace(".", "").replace(",", ""))
             timestamp = datetime.strptime(f"{date} {time}", '%Y/%m/%d %H:%M:%S')
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
         except ValueError:
             print(f"error: unexpected 'rsync --list-only' output line: {line}")
             sys.exit(1)
@@ -240,7 +241,7 @@ def dst_cmd(args, cmd: str, arg1: str, arg2: str) -> str:
         timestamp = arg1
         trg_path = arg2
         trg = fullpath(trg_path)
-        return wrap_cmd(f"touch -c -t {timestamp} {quote(trg)}")
+        return wrap_cmd(f"TZ=UTC0 touch -c -t {timestamp} {quote(trg)}")
     else:
         src_path = arg1
         trg_path = arg2
