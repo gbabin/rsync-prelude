@@ -35,7 +35,7 @@ run() {
     echo abc > file3a  ; touch -ct 202211271401 file3a
     echo 123 > file3b  ; touch -ct 202211271401 file3b
     echo abcd > file4  ; touch -ct 202211271401 file4
-    echo abcde > file5 ; touch -ct 202211271401 file5
+    echo àbçdé > file5 ; touch -ct 202211271401 file5
     # cycle with different sizes (but some files with same date)
     echo cycle1 > c1   ; touch -ct 202211271402 c1
     echo cycle22 > c2  ; touch -ct 202211271403 c2
@@ -46,7 +46,7 @@ run() {
 
     pushd test-root-tmp/source/folder > /dev/null
     mv -n file1 file1-renamed
-    mv -n file3a file3a-renamed
+    mv -n file3a file3å-renamed
     mkdir moved
     mv -n file2 moved/file2
     touch -ct 202301011201 moved
